@@ -1,0 +1,14 @@
+# Python virtual environment
+.venv/
+__pycache__/
+*.pyc
+
+# Local environment variables containing private API keys
+.env
+
+# Local mock databases and runtime files
+mock_jira_tickets.json
+
+# Local output reports
+output_recommendations.md
+output_followups.md

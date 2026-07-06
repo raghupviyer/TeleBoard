@@ -1,0 +1,27 @@
+[project]
+name = "tele_to_trello"
+version = "0.1.0"
+description = "Multi-agent Telegram to Jira Sync and Recommendation System"
+authors = [{ name = "AI Coding Assistant" }]
+requires-python = ">=3.10,<3.14"
+dependencies = [
+    "crewai[google-genai,tools]>=1.15.1,<2.0.0",
+    "mcp>=1.0.0,<2.0.0",
+    "python-dotenv>=1.0.0,<2.0.0",
+    "telethon>=1.35.0,<2.0.0",
+    "nest-asyncio>=1.6.0,<2.0.0",
+    "litellm>=1.90.2",
+    "google-generativeai>=0.8.0",
+]
+
+[project.scripts]
+run_flow = "tele_to_trello.main:kickoff"
+simulate_msg = "tele_to_trello.main:run_with_trigger"
+run_followup = "tele_to_trello.main:run_followup"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.crewai]
+type = "flow"
