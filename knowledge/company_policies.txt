@@ -1,0 +1,38 @@
+# Company Operating & SLA Policies
+
+## Context Overview
+- **Client Company**: ClientApp (represented internally by Tech Ops & Management).
+- **Third-Party Provider**: DevAgency (responsible for developing, provisioning, and maintaining the website, web platform, and native iOS/Android mobile apps).
+
+## Severity & SLA Levels
+1. **Critical Outages (P0/P1)**:
+   - *Scope*: Core engine down, wallet/deposit/withdrawal gateway failures, security breaches, system offline, mobile app crash-on-launch, or the main website being inaccessible.
+   - *Provider Response SLA*: Must respond/acknowledge within 15 minutes of being contacted via Telegram or Jira.
+   - *Provider Resolution SLA*: Must resolve or hotfix within 2 hours.
+   
+2. **Standard Bugs (P2/P3)**:
+   - *Scope*: Slow page load times, display glitches, history log filtering errors, or minor UI alignment issues in the web or mobile dashboards.
+   - *Provider Response SLA*: Must respond within 24 hours.
+   - *Provider Resolution SLA*: Must resolve within 5 business days.
+
+3. **Feature Requests & Enhancements**:
+   - The provider must provide a written technical SOW and story point estimate for any new features before development begins.
+
+## Telegram Communication & Escapes
+- **Interactive Prompts**: All informal user support requests or developer comments on Telegram must map to Jira tickets.
+- **Follow-up Rules**:
+  - If the provider asks a question on Telegram, the client internal team should reply within 2 hours during active business hours (9 AM - 6 PM UTC).
+  - If a Jira ticket is moved to "In Progress" by the provider but has no comment or commit update for more than 48 hours, the agent must trigger a proactive follow-up reminder.
+
+## Conversation Roles & Team Assignments
+To correctly categorize incoming messages, follow-up directions, and response tones, the agent must identify the sender's affiliation:
+
+- **Client Side (ClientApp / Tech Ops & Management)**:
+  - Senders: `@client_manager_user`, `ManagerName` (To add more client users, append their Telegram usernames or first names here, e.g. `, @john_manager, AdminUser`)
+  - *Role*: Client managers reporting bugs, requesting new features, or following up on progress. Messages from this side should trigger Jira ticket creation (Bug/Task) or comments to existing issues.
+  
+- **Provider Side (DevAgency)**:
+  - Senders: `@provider_support_user`, `DeveloperName` (To add more provider users, append their Telegram usernames or first names here, e.g. `, @dev_alice, SupportStaff`)
+  - *Role*: Provider developers or support asking questions, providing updates, or requesting clarifications. Messages from this side representing questions should be flagged for client follow-up.
+
+*System Alignment*: This project and every agent acts on behalf of the client, meaning we are reporting bugs and requests to the provider. Rationales and responses should reflect this client-to-provider relationship.

@@ -1,0 +1,16 @@
+# ClientApp - Product Specifications
+
+## System Overview & Architecture
+ClientApp is a multi-platform software product provisioned and maintained by the third-party Provider, composed of:
+1. **Marketing Website**: Public landing pages, token listing requests, fees page, and help center.
+2. **Web Trading Platform**: React-based dashboard featuring real-time dashboards, charts, balance dashboard, transfer, and user settings.
+3. **Mobile Apps (iOS & Android)**: Provisioned via React Native/Flutter, providing authentication, dashboards, and push notifications.
+
+## Critical Modules & Third-Party Provisioning
+- **Core Product Engine**: A low-latency backend engine. Key API endpoints:
+  - `POST /api/v1/orders/place` (submits user requests)
+  - `DELETE /api/v1/orders/cancel/{id}` (cancels active requests)
+- **Custody & Digital Asset Wallet System**: Integrated with custody APIs to provision user wallet addresses and secure deposit monitoring.
+- **Fiat Payment Gateways**: Supported third-party integrations for debit card purchases.
+- **KYC User Verification**: Outsource automated verification checks (document scanning, face match) via verification SDKs.
+- **Push Notification Service**: coordinates alerts between provider services and mobile app clients.
