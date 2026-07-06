@@ -1,0 +1,37 @@
+coordinate_sync_task:
+  description: >
+    Analyze the incoming Telegram message details:
+    Sender: {sender}
+    Timestamp: {timestamp}
+    Message Content: "{text}"
+    {reply_to_message_context}
+
+    Open Jira Tickets Context:
+    ---
+    {jira_tickets}
+    ---
+
+    Company Operating & SLA Policies Context:
+    ---
+    {company_policies}
+    ---
+
+    Company Product Specifications Context:
+    ---
+    {product_specs}
+    ---
+
+    Perform the following coordinator steps:
+    1. Categorize this message as exactly one of: "bug fix request", "feat development request", "followup on the task", "followup question from provider", or "uncategorized".
+    2. Determine the correct action to take ('create_bug', 'create_task', 'add_comment', 'prompt_user', or 'ignore').
+    3. Evaluate if the message refers to one of the open Jira tickets listed above. If so, identify and output the matching Jira ticket key (e.g. 'SCRUM-8').
+    4. Generate a professional and helpful response draft we should post in the Telegram chat to reply to this message. Make sure the response is strictly grounded in company policies and SLAs (e.g. SLA times, SOW requirements, who does manual testing, etc.).
+    5. Check if this message indicates a pending task or a provider question that needs follow-up, and draft a proactive follow-up reminder message if necessary.
+    6. Transition the matching Jira ticket status if appropriate based on these rules (if no match is identified, set to null):
+       - When the provider replies to our client bug fix or feature request (e.g. acknowledging the request, asking for clarification, or stating they started working), transition the ticket status to "In Progress".
+       - When the provider replies saying they have fixed or resolved the bug/task, transition the ticket status to "In Review".
+       - When a client team member replies stating that a bug is still not working after the provider claimed it was completed, transition the ticket status from "In Review" to "To Do".
+       - When the provider replies indicating they have restarted work on the task, transition the ticket status to "In Progress".
+  expected_output: >
+    A structured Pydantic report containing category, action_required, matching_jira_key, recommended_response, followup_draft, rationale, and target_jira_status.
+  agent: jira_coordinator
