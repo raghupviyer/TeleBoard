@@ -92,14 +92,19 @@ def get_llm(use_nvidia=False) -> LLM:
         print(f"[LLM Config] Base URL: {base_url}")
     print(f"[LLM Config] Failover Chain: {fallbacks}")
     
-    return LLM(
-        model=primary_model,
-        api_key=primary_key if primary_key else None,
-        base_url=base_url,
-        fallbacks=fallbacks,
-        is_litellm=True,
-        temperature=0.2
-    )
+    llm_kwargs = {
+        "model": primary_model,
+        "api_key": primary_key if primary_key else None,
+        "base_url": base_url,
+        "fallbacks": fallbacks,
+        "is_litellm": True,
+        "temperature": 0.2
+    }
+    if primary_model.startswith("ollama/"):
+        llm_kwargs["num_ctx"] = 8192
+        llm_kwargs["options"] = {"num_ctx": 8192}
+        
+    return LLM(**llm_kwargs)
 
 class SyncResolution(BaseModel):
     category: str = Field(description="Exactly one of: 'bug fix request', 'feat development request', 'followup on the task', 'followup question from provider', or 'uncategorized'")
