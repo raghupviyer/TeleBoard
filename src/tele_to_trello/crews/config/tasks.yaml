@@ -1,37 +1,51 @@
 coordinate_sync_task:
   description: >
-    Analyze the incoming Telegram message details:
-    Sender: {sender}
-    Timestamp: {timestamp}
-    Message Content: "{text}"
+    Analyze the incoming Telegram message:
+    - SENDER: {sender}
+    - TIMESTAMP: {timestamp}
+    - MESSAGE: "{text}"
     {reply_to_message_context}
 
-    Open Jira Tickets Context:
+    CONTEXT:
+    1. Open Tickets (Jira/OpenProject):
     ---
-    {jira_tickets}
+    {open_tickets}
     ---
 
-    Company Operating & SLA Policies Context:
+    2. Company Operating & SLA Policies:
     ---
     {company_policies}
     ---
 
-    Company Product Specifications Context:
+    3. Product Specifications:
     ---
     {product_specs}
     ---
 
-    Perform the following coordinator steps:
-    1. Categorize this message as exactly one of: "bug fix request", "feat development request", "followup on the task", "followup question from provider", or "uncategorized".
-    2. Determine the correct action to take ('create_bug', 'create_task', 'add_comment', 'prompt_user', or 'ignore').
-    3. Evaluate if the message refers to one of the open Jira tickets listed above. If so, identify and output the matching Jira ticket key (e.g. 'SCRUM-8').
-    4. Generate a professional and helpful response draft we should post in the Telegram chat to reply to this message. Make sure the response is strictly grounded in company policies and SLAs (e.g. SLA times, SOW requirements, who does manual testing, etc.).
-    5. Check if this message indicates a pending task or a provider question that needs follow-up, and draft a proactive follow-up reminder message if necessary.
-    6. Transition the matching Jira ticket status if appropriate based on these rules (if no match is identified, set to null):
-       - When the provider replies to our client bug fix or feature request (e.g. acknowledging the request, asking for clarification, or stating they started working), transition the ticket status to "In Progress".
-       - When the provider replies saying they have fixed or resolved the bug/task, transition the ticket status to "In Review".
-       - When a client team member replies stating that a bug is still not working after the provider claimed it was completed, transition the ticket status from "In Review" to "To Do".
-       - When the provider replies indicating they have restarted work on the task, transition the ticket status to "In Progress".
+    INSTRUCTIONS:
+    Perform the following steps:
+    1. CATEGORY: Classify this message as exactly one of: "bug fix request", "feat development request", "followup on the task", "followup question from provider", or "uncategorized".
+    2. ACTION REQUIRED: Choose exactly one based on these strict guidelines:
+       - 'create_bug': Use ONLY for a completely new, distinct bug report that is not represented in the open tickets list.
+       - 'create_task': Use ONLY for a completely new, distinct feature or task request that is not in the open tickets list.
+       - 'add_comment': Use if the message is a follow-up, update, or re-type that adds new context, details, or replies to an existing open ticket.
+       - 'ignore': Use if the message is a duplicate or simple re-type of a report already captured in an open ticket with NO new details, context, or status updates.
+       - 'prompt_user': Use for uncategorized text requiring manual operator intervention.
+    3. MATCHING TICKET KEY: If 'add_comment' or 'ignore' is chosen, identify the matching open ticket key/ID (e.g. 'SCRUM-8'). Otherwise set to null.
+    4. RECOMMENDED RESPONSE: Draft a response to the message ONLY if the sender belongs to the Provider (DevAgency). If the sender is from the Client (ClientApp/Tech Ops), recommended_response MUST be null or an empty string (we never reply to client tickets).
+    5. FOLLOW-UP DRAFT: If the message indicates a pending task or provider question that needs follow-up, draft a reminder. Otherwise null.
+    6. TARGET TICKET STATUS: Transition status using these rules (otherwise set to null):
+       - If Provider replies to Client bug/feature request (acknowledges, asks questions, starts work): set to "In Progress".
+       - If Provider says they fixed/resolved it: set to "In Review".
+       - If Client says it is still broken after Provider claimed completion: set to "To Do".
+       - If Provider restarts work: set to "In Progress".
   expected_output: >
-    A structured Pydantic report containing category, action_required, matching_jira_key, recommended_response, followup_draft, rationale, and target_jira_status.
-  agent: jira_coordinator
+    A raw, valid JSON object (and absolutely nothing else) with no conversational prefix or suffix, containing exactly these keys:
+    - "category": (str) Exactly one of: 'bug fix request', 'feat development request', 'followup on the task', 'followup question from provider', or 'uncategorized'
+    - "action_required": (str) Exactly one of: 'create_bug', 'create_task', 'add_comment', 'prompt_user', 'ignore'
+    - "matching_ticket_key": (str or null) Key of matching open ticket (e.g. 'SCRUM-8'), otherwise null
+    - "recommended_response": (str or null) Draft reply grounded in SLA guidelines (must be null/empty for Client side), otherwise null
+    - "followup_draft": (str or null) Draft of proactive follow-up reminder if needed, otherwise null
+    - "rationale": (str) Brief explanation of which policies were referenced and why
+    - "target_ticket_status": (str or null) 'To Do', 'In Progress', 'In Review', or null
+  agent: sync_coordinator

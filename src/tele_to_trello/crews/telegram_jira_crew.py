@@ -7,7 +7,7 @@ from crewai.agents.agent_builder.base_agent import BaseAgent
 from pydantic import BaseModel, Field
 
 # Load environment variables
-load_dotenv()
+load_dotenv(override=True)
 
 def get_llm(use_nvidia=False) -> LLM:
     """Helper to select LLM based on environment variables with automatic fallbacks."""
@@ -109,15 +109,15 @@ def get_llm(use_nvidia=False) -> LLM:
 class SyncResolution(BaseModel):
     category: str = Field(description="Exactly one of: 'bug fix request', 'feat development request', 'followup on the task', 'followup question from provider', or 'uncategorized'")
     action_required: str = Field(description="The action we should take: 'create_bug', 'create_task', 'add_comment', 'prompt_user', or 'ignore'")
-    matching_jira_key: Optional[str] = Field(description="The key of the matching open Jira ticket (e.g. 'SCRUM-8') if a match was identified. Otherwise null.")
-    recommended_response: str = Field(description="A professional, polite reply to the Telegram message grounded in SLA guidelines.")
+    matching_ticket_key: Optional[str] = Field(description="The key/ID of the matching open ticket (e.g. Jira key like 'SCRUM-8' or OpenProject ID like '123') if a match was identified. Otherwise null.")
+    recommended_response: Optional[str] = Field(default=None, description="A professional, polite reply to the Telegram message grounded in SLA guidelines. Otherwise null.")
     followup_draft: Optional[str] = Field(description="Draft of proactive follow-up reminder if escalation or follow-up is needed. Otherwise null.")
     rationale: str = Field(description="Brief explanation of which company policies or specifications were referenced and why.")
-    target_jira_status: Optional[str] = Field(default=None, description="If a status update is appropriate for the matching ticket, specify the target status name: 'To Do', 'In Progress', 'In Review', or null.")
+    target_ticket_status: Optional[str] = Field(default=None, description="If a status update is appropriate for the matching ticket, specify the target status name: 'To Do', 'In Progress', 'In Review', or null.")
 
 @CrewBase
-class TelegramJiraCrew:
-    """Telegram to Jira Sync & Recommendations Crew"""
+class TelegramSyncCrew:
+    """Telegram to Ticketing Provider Sync & Recommendations Crew"""
 
     agents: List[BaseAgent]
     tasks: List[Task]
@@ -126,24 +126,24 @@ class TelegramJiraCrew:
     tasks_config = "config/tasks.yaml"
 
     @agent
-    def jira_coordinator(self) -> Agent:
+    def sync_coordinator(self) -> Agent:
         use_nvidia = getattr(self, "use_nvidia", False)
         return Agent(
-            config=self.agents_config["jira_coordinator"],  # type: ignore[index]
+            config=self.agents_config["sync_coordinator"],  # type: ignore[index]
             llm=get_llm(use_nvidia=use_nvidia),
+            allow_delegation=False,
             verbose=True,
         )
 
     @task
     def coordinate_sync_task(self) -> Task:
         return Task(
-            config=self.tasks_config["coordinate_sync_task"],  # type: ignore[index]
-            output_pydantic=SyncResolution
+            config=self.tasks_config["coordinate_sync_task"]  # type: ignore[index]
         )
 
     @crew
     def crew(self) -> Crew:
-        """Creates the TelegramJiraCrew"""
+        """Creates the TelegramSyncCrew"""
         return Crew(
             agents=self.agents,
             tasks=self.tasks,

@@ -28,11 +28,11 @@
 To correctly categorize incoming messages, follow-up directions, and response tones, the agent must identify the sender's affiliation:
 
 - **Client Side (ClientApp / Tech Ops & Management)**:
-  - Senders: `@client_manager_user`, `ManagerName` (To add more client users, append their Telegram usernames or first names here, e.g. `, @john_manager, AdminUser`)
+  - Senders: `@raghupviyer`, ` (To add more client users, append their Telegram usernames or first names here, e.g. `, @john_manager, AdminUser`)
   - *Role*: Client managers reporting bugs, requesting new features, or following up on progress. Messages from this side should trigger Jira ticket creation (Bug/Task) or comments to existing issues.
   
 - **Provider Side (DevAgency)**:
-  - Senders: `@provider_support_user`, `DeveloperName` (To add more provider users, append their Telegram usernames or first names here, e.g. `, @dev_alice, SupportStaff`)
+  - Senders: `@tinykefu` (To add more provider users, append their Telegram usernames or first names here, e.g. `, @dev_alice, SupportStaff`)
   - *Role*: Provider developers or support asking questions, providing updates, or requesting clarifications. Messages from this side representing questions should be flagged for client follow-up.
 
 *System Alignment*: This project and every agent acts on behalf of the client, meaning we are reporting bugs and requests to the provider. Rationales and responses should reflect this client-to-provider relationship.

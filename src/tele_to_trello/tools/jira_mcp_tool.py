@@ -1,25 +1,25 @@
 from typing import Type, List, Dict, Any
 from crewai.tools import BaseTool
 from pydantic import BaseModel, Field
-from tele_to_trello.utils.mcp_client import JiraMCPClient
+from tele_to_trello.utils.mcp_client import OpenProjectMCPClient
 
 # Initialize client globally or inside the tools
-jira_client = JiraMCPClient()
+openproject_client = OpenProjectMCPClient()
 
-# --- Search Issue Tool ---
-class SearchJiraIssuesInput(BaseModel):
-    query: str = Field(..., description="Search query string to search by issue key, summary, or description.")
+# --- Search Work Package Tool ---
+class SearchOpenProjectInput(BaseModel):
+    query: str = Field(..., description="Search query string to search by work package ID or subject.")
 
-class SearchJiraIssuesTool(BaseTool):
-    name: str = "search_jira_issues"
-    description: str = "Search for existing issues in Jira. Use this to find if a Telegram message relates to an existing ticket."
-    args_schema: Type[BaseModel] = SearchJiraIssuesInput
+class SearchOpenProjectTool(BaseTool):
+    name: str = "search_openproject_work_packages"
+    description: str = "Search for existing work packages in OpenProject. Use this to find if a Telegram message relates to an existing ticket."
+    args_schema: Type[BaseModel] = SearchOpenProjectInput
 
     def _run(self, query: str) -> str:
         try:
-            issues = jira_client.search_issues(query)
+            issues = openproject_client.search_issues(query)
             if not issues:
-                return "No matching Jira issues found."
+                return "No matching OpenProject work packages found."
             
             output = []
             for issue in issues:
@@ -32,40 +32,40 @@ class SearchJiraIssuesTool(BaseTool):
             
             return "\n".join(output)
         except Exception as e:
-            return f"Error searching Jira issues: {e}"
+            return f"Error searching OpenProject work packages: {e}"
 
-# --- Create Issue Tool ---
-class CreateJiraIssueInput(BaseModel):
+# --- Create Work Package Tool ---
+class CreateOpenProjectInput(BaseModel):
     summary: str = Field(..., description="A short, descriptive summary of the bug or feature request.")
     description: str = Field(..., description="Detailed description of the bug or feature request, including chat history or context.")
-    issuetype: str = Field("Bug", description="The type of Jira issue: 'Bug' (for bugs) or 'Task' (for features).")
+    issuetype: str = Field("Bug", description="The type of work package: 'Bug' (for bugs) or 'Task' (for features).")
 
-class CreateJiraIssueTool(BaseTool):
-    name: str = "create_jira_issue"
-    description: str = "Create a new bug ticket or feature request in Jira. Returns the key of the newly created issue."
-    args_schema: Type[BaseModel] = CreateJiraIssueInput
+class CreateOpenProjectTool(BaseTool):
+    name: str = "create_openproject_work_package"
+    description: str = "Create a new bug ticket or feature request in OpenProject. Returns the ID of the newly created work package."
+    args_schema: Type[BaseModel] = CreateOpenProjectInput
 
     def _run(self, summary: str, description: str, issuetype: str = "Bug") -> str:
         try:
-            issue = jira_client.create_issue(summary, description, issuetype)
+            issue = openproject_client.create_issue(summary, description, issuetype)
             key = issue.get("key", "Unknown")
-            return f"Successfully created issue {key} ({issuetype}): '{summary}'"
+            return f"Successfully created work package {key} ({issuetype}): '{summary}'"
         except Exception as e:
-            return f"Error creating Jira issue: {e}"
+            return f"Error creating OpenProject work package: {e}"
 
 # --- Add Comment Tool ---
-class AddJiraCommentInput(BaseModel):
-    issue_key: str = Field(..., description="The Jira issue key (e.g. BUG-1) or summary to add the comment under.")
+class AddOpenProjectCommentInput(BaseModel):
+    issue_key: str = Field(..., description="The OpenProject work package ID to add the comment under.")
     body: str = Field(..., description="The content of the comment. Include message sender, content and timestamp.")
 
-class AddJiraCommentTool(BaseTool):
-    name: str = "add_jira_comment"
-    description: str = "Add a comment to an existing Jira issue. Use this to append conversation history or replies from the group chat."
-    args_schema: Type[BaseModel] = AddJiraCommentInput
+class AddOpenProjectCommentTool(BaseTool):
+    name: str = "add_openproject_comment"
+    description: str = "Add a comment to an existing OpenProject work package. Use this to append conversation history or replies from the group chat."
+    args_schema: Type[BaseModel] = AddOpenProjectCommentInput
 
     def _run(self, issue_key: str, body: str) -> str:
         try:
-            jira_client.add_comment(issue_key, body)
-            return f"Successfully added comment to issue {issue_key}."
+            openproject_client.add_comment(issue_key, body)
+            return f"Successfully added comment to work package {issue_key}."
         except Exception as e:
-            return f"Error adding comment to Jira issue: {e}"
+            return f"Error adding comment to OpenProject work package: {e}"

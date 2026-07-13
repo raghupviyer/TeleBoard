@@ -1,6 +1,6 @@
-# Telegram to Jira Multi-Agent CrewAI System
+# Telegram to OpenProject Multi-Agent CrewAI System
 
-A multi-agent flow system built in Python using **CrewAI** that monitors a Telegram group conversation, automatically classifies requests, syncs conversations task-by-task to **Jira** using a Model Context Protocol (MCP) server, and recommends grounded replies and proactive follow-ups based on the company's knowledge base.
+A multi-agent flow system built in Python using **CrewAI** that monitors a Telegram group conversation, automatically classifies requests, syncs conversations task-by-task to **OpenProject** using its REST API v3, and recommends grounded replies and proactive follow-ups based on the company's knowledge base.
 
 ---
 
@@ -10,32 +10,32 @@ The project orchestrates two main workflows:
 
 ### Ingestion Flow (Continuous Polling)
 
-Monitors incoming messages and uses a unified coordinator agent to sync details to Jira:
+Monitors incoming messages and uses a unified coordinator agent to sync details to OpenProject:
 
 ```text
-[ Telegram Chat ] ──► (TelegramJiraFlow) 
+[ Telegram Chat ] ──► (TelegramOpenProjectFlow) 
                            │
-                           └──► [Agent] Telegram & Jira Operations Sync Coordinator
+                           └──► [Agent] Telegram & OpenProject Operations Sync Coordinator
                                      │
                                      ├──► 1. Affiliation Lookup (Client vs. Provider)
                                      ├──► 2. Category Classification (bug, feat, followup, query, junk)
-                                     ├──► 3. Jira action mapping (search/link/comment/create)
+                                     ├──► 3. OpenProject action mapping (search/link/comment/create)
                                      ├──► 4. Dynamic transition (To Do, In Progress, In Review)
                                      └──► 5. Recommended reply draft
 ```
 
-* **Coordinator Agent**: A unified `jira_coordinator` agent that acts in a single cognitive step to analyze context, determine affiliations, find matching Jira tickets, write comments, draft professional responses, and transition issue statuses. Doing this in a single step dramatically reduces token overhead and improves processing speed.
+* **Coordinator Agent**: A unified `openproject_coordinator` agent that acts in a single cognitive step to analyze context, determine affiliations, find matching OpenProject work packages, write comments, draft professional responses, and transition issue statuses. Doing this in a single step dramatically reduces token overhead and improves processing speed.
 * **Interactive Multi-Approver DM Flow**: When a message is classified as `uncategorized`, the bot sends private approval prompts to all configured administrator accounts (`TELEGRAM_APPROVER_IDS`). The first administrator to select an action claims the request; other administrators' DMs are immediately updated in real-time to prevent duplicate task mapping.
 
 ### Proactive Follow-up Check
 
-An automated script that audits open Jira issues, compares comment history against SLA policies, and drafts follow-up nudges:
+An automated script that audits open OpenProject work packages, compares comment history against SLA policies, and drafts follow-up nudges:
 
 ```text
-[ Jira Open Tickets ] ──► (run_followup) ──► [Agent] Task Follow-up Specialist ──► output_followups.md
+[ OpenProject Open Work Packages ] ──► (run_followup) ──► [Agent] Task Follow-up Specialist ──► output_followups.md
 ```
 
-* **Follow-up Agent**: Evaluates open tickets to check if they are stuck or missing updates, drafting polite progress reminders grounded in SLA policies.
+* **Follow-up Agent**: Evaluates open tickets/work packages to check if they are stuck or missing updates, drafting polite progress reminders grounded in SLA policies.
 
 ---
 
@@ -48,8 +48,6 @@ tele_to_trello/
 ├── .env.example                # Configuration template for deployment
 ├── .gitignore                  # Git untracked settings
 ├── knowledge/                  # Company Knowledge Base directory
-│   ├── company_policies.txt    # SLA limits, response times, and team affiliation definitions
-│   └── product_specs.txt       # Technical specifications and API module definitions
 ├── src/
 │   └── tele_to_trello/
 │       ├── __init__.py
@@ -62,10 +60,10 @@ tele_to_trello/
 │       │       └── tasks.yaml  # Prompt configurations for tasks
 │       ├── tools/
 │       │   ├── __init__.py
-│       │   └── jira_mcp_tool.py # CrewAI tool wrappers for the MCP Client
+│       │   └── jira_mcp_tool.py # CrewAI tool wrappers for the OpenProject Client
 │       └── utils/
 │           ├── __init__.py
-│           └── mcp_client.py   # Resilient schema-aware Jira API & Agile Sprint MCP client
+│           └── mcp_client.py   # Resilient schema-aware OpenProject API v3 client
 └── output_recommendations.md   # Report generated after running main flow
 ```
 
@@ -77,15 +75,17 @@ tele_to_trello/
 
 * **Python**: Version `>=3.10` and `<3.14`.
 * **uv**: Fast Python package manager (run `curl -LsSf https://astral.sh/uv/install.sh | sh` to install if needed).
-* **Node.js & npx**: Required to launch the Node-based Jira MCP server.
 
 ### Installation
 
 1. Navigate to the project directory:
+
    ```bash
    cd tele_to_trello
    ```
+
 2. Install dependencies and establish the virtual environment:
+
    ```bash
    uv sync
    ```
@@ -93,28 +93,17 @@ tele_to_trello/
 ### Configuration
 
 1. Create your active configuration file:
+
    ```bash
    cp .env.example .env
    ```
+
 2. Open `.env` and fill in the required keys:
    * `OPENAI_API_KEY` (or `GEMINI_API_KEY`): Used by the CrewAI framework for agent execution.
    * `OLLAMA_MODEL` & `OLLAMA_BASE_URL` (Optional): Specify these to connect the system to a local Ollama instance (e.g. `OLLAMA_MODEL=gemma4:latest` and `OLLAMA_BASE_URL=http://127.0.0.1:11434`). If set, Ollama is treated as the primary model. The system automatically configures a context window length of `8192` (`num_ctx=8192`) for Ollama to prevent prompt truncation.
    * `TELEGRAM_BOT_TOKEN` & `TELEGRAM_CHAT_ID`: Credentials of the bot monitoring the group chat.
    * `TELEGRAM_APPROVER_IDS`: Comma-separated list of individual chat/user IDs authorized to receive private DM approvals (e.g., `123456789,987654321`). Falls back to the group chat if left blank.
-   * `JIRA_HOST`, `JIRA_EMAIL`, `JIRA_API_TOKEN` & `JIRA_PROJECT_KEY`: Credentials for authentication with your Jira cloud instance.
-   * `JIRA_DEFAULT_SPRINT_ID`: The active Sprint ID to assign newly created tickets automatically (e.g., `2` for Sprint 0). Leaves issues in the backlog if empty.
-   * `JIRA_MCP_COMMAND` & `JIRA_MCP_ARGS`: Startup command configuration to run the Node Jira MCP server subprocess (defaults to `npx` and `-y,@modelcontextprotocol/server-jira`).
-
-### LLM Auto-Detection & Resilient Fallbacks
-
-The system automatically detects configured credentials from your `.env` file to select the optimal model setup:
-
-* **Detection & Prioritization**:
-  * **Ollama (Local)**: If `OLLAMA_MODEL` is set, the system configures it as the primary LLM model.
-  * **Gemini (Cloud)**: If `GEMINI_API_KEY` is provided, Gemini models are loaded.
-  * **NVIDIA NIM (Cloud)**: If `NVIDIA_API_KEY` is set, NIM endpoints are loaded.
-* **Auto-Fallback Chain**:
-  LiteLLM dynamically manages a failover chain using all detected APIs. If your primary local model (Ollama) is offline, runs out of memory, or fails to connect, **it will automatically and transparently fall back** to Gemini or NVIDIA NIM in the background, ensuring uninterrupted task synchronization.
+   * `OPENPROJECT_HOST`, `OPENPROJECT_API_KEY` & `OPENPROJECT_PROJECT_ID`: Credentials and project identifier for authentication with your OpenProject instance.
 
 ---
 
@@ -124,14 +113,16 @@ The system provides three command entrypoints via `uv run`:
 
 ### Run Ingestion Flow
 
-Reads new messages from the Telegram chat, processes them through the CrewAI agents, syncs task details to Jira, and outputs recommended responses.
+Reads new messages from the Telegram chat, processes them through the CrewAI agents, syncs task details to OpenProject, and outputs recommended responses.
+
 ```bash
 uv run run_flow
 ```
 
 ### Run Follow-up Check
 
-Checks all active/open Jira tickets, reviews status and comment history, and uses your company knowledge base to generate polite nudge follow-up messages for outstanding items.
+Checks all active/open OpenProject work packages, reviews status and comment/activity history, and uses your company knowledge base to generate polite nudge follow-up messages for outstanding items.
+
 ```bash
 uv run run_followup
 ```
@@ -139,6 +130,7 @@ uv run run_followup
 ### Run Trigger Simulation
 
 Sends an ad-hoc message payload into the system to verify the pipeline manually.
+
 ```bash
 uv run simulate_msg '{"sender": "@client_manager_user", "text": "Stripe checkout is throwing a 500 error", "timestamp": "2026-07-02T10:00:00Z"}'
 ```
@@ -151,22 +143,11 @@ uv run simulate_msg '{"sender": "@client_manager_user", "text": "Stripe checkout
 
 * **Telegram Messages**: Live JSON message formats polled from the chat group.
 * **Knowledge Base**: Documents inside the `knowledge/` folder. Supports `.txt` files containing policies, SLAs, or technical specs.
-* **Jira Tickets**: Active ticket details and comment history retrieved dynamically by the Jira Manager.
+* **OpenProject Work Packages**: Active work package details and activity history retrieved dynamically by the OpenProject client.
 
 ### Outputs
 
-* **Jira Actions**: Creates new issues (e.g., `SCRUM-10`), adds comments containing the sender and context of conversations, and transitions issue statuses (To Do, In Progress, In Review).
+* **OpenProject Actions**: Creates new work packages (e.g., Bugs, Tasks), adds comments containing the sender and context of conversations, and transitions work package statuses (To Do, In Progress, In Review).
 * **Local Reports**:
-  * `output_recommendations.md`: Generated by the ingestion flow. Contains category classifications, target statuses, issue mappings, and drafts for recommended responses.
+  * `output_recommendations.md`: Generated by the ingestion flow. Contains category classifications, target statuses, work package mappings, and drafts for recommended responses.
   * `output_followups.md`: Generated by the follow-up checker. Contains action items, rationales, and drafted nudges.
-
----
-
-## Credits & Acknowledgments
-
-* **Raghuprasaad Iyer** - Creator and Project Lead
-* **Antigravity (Google DeepMind)** - AI coding assistant and pairing partner
-* **CrewAI** - Core Agentic Orchestration Framework
-* **Model Context Protocol (MCP)** - Node Jira MCP Server
-* **LiteLLM** - LLM API Interface & Translation Layer
-* **Telethon & Telegram APIs** - Ingestion client frameworks
