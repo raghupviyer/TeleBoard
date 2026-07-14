@@ -3,6 +3,7 @@ import os
 import json
 import sys
 import html
+import sqlite3
 from pathlib import Path
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any
@@ -103,12 +104,52 @@ def save_user_assignment(chat_id: str, user_id: str, name: str, team: str, is_ap
     save_all_user_assignments(all_assign)
     print(f"Saved assignment for user {user_id} ({name}) in chat {chat_id}: team={team}, is_approver={is_approver}")
 
+def init_db(project_root: Path):
+    db_path = project_root / "messages.db"
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS telegram_messages (
+            id INTEGER PRIMARY KEY,
+            message_json TEXT,
+            status TEXT
+        )
+    ''')
+    conn.commit()
+    conn.close()
+    return db_path
+
 class TelegramSyncState(BaseModel):
     messages_to_process: List[Dict[str, Any]] = Field(default_factory=list)
     processed_count: int = 0
     results: List[Dict[str, Any]] = Field(default_factory=list)
 
 class TelegramSyncFlow(Flow[TelegramSyncState]):
+
+    def _mark_message_processed(self, msg_id: int):
+        current = Path(__file__).resolve().parent
+        project_root = None
+        for parent in [current] + list(current.parents):
+            if (parent / "pyproject.toml").exists() or (parent / "knowledge").exists():
+                project_root = parent
+                break
+        if not project_root:
+            project_root = Path.cwd()
+            
+        db_path = project_root / "messages.db"
+        try:
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
+            cursor.execute("UPDATE telegram_messages SET status = 'processed' WHERE id = ?", (msg_id,))
+            conn.commit()
+            conn.close()
+            
+            offset_file = project_root / "last_update_id.txt"
+            with open(offset_file, "w") as f:
+                f.write(str(msg_id))
+            print(f"Saved offset {msg_id} to last_update_id.txt")
+        except Exception as e:
+            print(f"Error updating message {msg_id} status to processed: {e}")
 
     @start()
     def fetch_messages(self):
@@ -127,8 +168,20 @@ class TelegramSyncFlow(Flow[TelegramSyncState]):
                 "========================================================================\n"
             )
 
+        # Initialize SQLite database
+        current = Path(__file__).resolve().parent
+        project_root = None
+        for parent in [current] + list(current.parents):
+            if (parent / "pyproject.toml").exists() or (parent / "knowledge").exists():
+                project_root = parent
+                break
+        if not project_root:
+            project_root = Path.cwd()
+            
+        db_path = init_db(project_root)
+
         # Read last processed update_id from offset file
-        offset_file = Path("last_update_id.txt")
+        offset_file = project_root / "last_update_id.txt"
         offset = None
         if offset_file.exists():
             try:
@@ -140,10 +193,41 @@ class TelegramSyncFlow(Flow[TelegramSyncState]):
         print(f"Fetching messages from live Telegram API (polling chat {chat_id}, offset={offset})...")
         try:
             messages = self._fetch_live_telegram_messages(bot_token, chat_id, offset)
-            self.state.messages_to_process = messages
-            print(f"Fetched {len(messages)} new live messages.")
+            print(f"Fetched {len(messages)} new live messages from API.")
+            
+            # Save fetched messages to DB
+            if messages:
+                conn = sqlite3.connect(db_path)
+                cursor = conn.cursor()
+                max_update_id = 0
+                for msg in messages:
+                    cursor.execute('''
+                        INSERT OR IGNORE INTO telegram_messages (id, message_json, status)
+                        VALUES (?, ?, ?)
+                    ''', (msg["id"], json.dumps(msg), "pending"))
+                    if msg["id"] > max_update_id:
+                        max_update_id = msg["id"]
+                conn.commit()
+                conn.close()
+                
+
+
+            # Load all pending messages from DB
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
+            cursor.execute("SELECT message_json FROM telegram_messages WHERE status = 'pending' ORDER BY id ASC")
+            pending_rows = cursor.fetchall()
+            conn.close()
+            
+            pending_messages = []
+            for row in pending_rows:
+                pending_messages.append(json.loads(row[0]))
+                
+            self.state.messages_to_process = pending_messages
+            print(f"Loaded {len(pending_messages)} pending messages from local database for processing.")
+            
         except Exception as e:
-            print(f"\nERROR: Failed to connect to live Telegram API: {e}\n", file=sys.stderr)
+            print(f"\nERROR: Failed to connect to live Telegram API or DB: {e}\n", file=sys.stderr)
             raise e
 
     @listen(fetch_messages)
@@ -229,6 +313,7 @@ class TelegramSyncFlow(Flow[TelegramSyncState]):
                     "target_ticket_status": None
                 })
                 self.state.processed_count += 1
+                self._mark_message_processed(msg["id"])
                 continue
             if msg_text_clean:
                 seen_messages.add(msg_key)
@@ -350,7 +435,8 @@ class TelegramSyncFlow(Flow[TelegramSyncState]):
                             "target_ticket_status": None
                         })
                         self.state.processed_count += 1
-                        continue
+                        self._mark_message_processed(msg["id"])
+                        break
                     except Exception as e:
                         print(f"Error in dynamic user assignment flow: {e}")
                         outcome = f"Error during user team assignment: {e}"
@@ -367,7 +453,8 @@ class TelegramSyncFlow(Flow[TelegramSyncState]):
                             "target_ticket_status": None
                         })
                         self.state.processed_count += 1
-                        continue
+                        self._mark_message_processed(msg["id"])
+                        break
 
                 # Build dynamic assignments context for this message processing
                 current_assignments = load_user_assignments(chat_id)
@@ -462,8 +549,8 @@ class TelegramSyncFlow(Flow[TelegramSyncState]):
                         "rationale": f"LLM error: {e}",
                         "target_ticket_status": None
                     })
-                    self.state.processed_count += 1
-                    continue
+                    # DO NOT mark as processed so it can be retried next run
+                    break
                 
                 category = "uncategorized"
                 action_required = "prompt_user"
@@ -700,6 +787,7 @@ class TelegramSyncFlow(Flow[TelegramSyncState]):
                     "target_ticket_status": target_ticket_status
                 })
                 self.state.processed_count += 1
+                self._mark_message_processed(msg["id"])
 
             except Exception as loop_err:
                 print(f"CRITICAL SYSTEM ERROR: Failed to process message {msg['id']}: {loop_err}")
@@ -715,7 +803,8 @@ class TelegramSyncFlow(Flow[TelegramSyncState]):
                     "rationale": f"System crash: {loop_err}",
                     "target_ticket_status": None
                 })
-                self.state.processed_count += 1
+                # DO NOT mark as processed so it can be retried next run
+                break
             
         print(f"Processed {self.state.processed_count} messages successfully.")
 
@@ -914,16 +1003,6 @@ class TelegramSyncFlow(Flow[TelegramSyncState]):
                 f.write("\n".join(report_lines))
             print(f"Report saved to {OUTPUT_REPORT_FILE}")
 
-        # Save maximum update ID to prevent re-processing
-        if self.state.messages_to_process:
-            max_update_id = max(msg["id"] for msg in self.state.messages_to_process)
-            offset_file = Path("last_update_id.txt")
-            try:
-                with open(offset_file, "w") as f:
-                    f.write(str(max_update_id))
-                print(f"Saved offset {max_update_id} to last_update_id.txt")
-            except Exception as e:
-                print(f"Error saving offset to file: {e}")
 
     def _fetch_live_telegram_messages(self, token: str, chat_id: str, offset: int = None) -> List[Dict[str, Any]]:
         import requests
