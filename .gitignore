@@ -9,6 +9,8 @@ __pycache__/
 # Local mock databases and runtime files
 mock_jira_tickets.json
 last_update_id.txt
+messages.db
+*.db
 
 # Local output reports
 output_recommendations.md
